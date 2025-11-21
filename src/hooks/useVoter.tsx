@@ -1,62 +1,66 @@
-import { useState } from "react";
-import { getProvider, readOnlyProvider } from "@/connection/providers";
-import { useAppKitProvider } from "@reown/appkit/react";
-import { getContract } from "@/connection/contracts";
+/**
+ * @deprecated This hook is deprecated. Use useQVRoom hook instead for voter operations.
+ * 
+ * Migration guide:
+ * - For registerVoter: use useQVRoom({ roomAddress }).registerVoter(matNumber)
+ * - For castVote: use useQVRoom({ roomAddress }).castVote(sessionId, proposalIds, credits)
+ * 
+ * This hook is kept for backwards compatibility only.
+ */
 
-export const useVoter = () => {
-    const { walletProvider } = useAppKitProvider("eip155");
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-  
-    const readWriteProvider = getProvider(walletProvider);
+import { type Address } from "viem";
+import { useQVRoom } from "./useQVRoom";
 
-  const registerVoter = async (matNumber:string) => {
-    setLoading(true);
+interface UseVoterParams {
+  roomAddress?: Address;
+}
+
+export const useVoter = ({ roomAddress }: UseVoterParams = {}) => {
+  const {
+    registerVoter: registerVoterFn,
+    castVote: castVoteFn,
+    isWriting,
+    errorWrite,
+  } = useQVRoom({ roomAddress });
+
+  const registerVoter = async (matNumber: string) => {
+    if (!roomAddress) {
+      throw new Error("Room address is required");
+    }
     try {
-        const signer = readWriteProvider
-        ? await readWriteProvider.getSigner()
-        : readOnlyProvider;
-      const contract = getContract(signer);
-      const tx = await contract.registerVoter(matNumber);
-      await tx.wait();
-    } catch (err:any) {
-      setError(err);
-    } finally {
-      setLoading(false);
+      await registerVoterFn(matNumber);
+    } catch (err: any) {
+      console.error("Failed to register voter:", err);
+      throw err;
     }
   };
 
   const castVote = async (
-    roomId: number, 
-    sessionId: number, 
-    proposalIds: number[], 
-    credits: number[]
+    sessionId: bigint,
+    proposalIds: bigint[],
+    credits: bigint[]
   ) => {
-    setLoading(true);
+    if (!roomAddress) {
+      throw new Error("Room address is required");
+    }
+
+    // Validate arrays have same length
+    if (proposalIds.length !== credits.length) {
+      throw new Error("ProposalIds and credits arrays must have the same length");
+    }
+
     try {
-      const signer = readWriteProvider
-        ? await readWriteProvider.getSigner()
-        : readOnlyProvider;
-      const contract = getContract(signer);
-      
-      // Validate arrays have same length
-      if (proposalIds.length !== credits.length) {
-        throw new Error("ProposalIds and credits arrays must have the same length");
-      }
-  
-      const tx = await contract.castVote(
-        roomId,
-        sessionId, 
-        proposalIds,
-        credits
-      );
-      await tx.wait();
+      await castVoteFn(sessionId, proposalIds, credits);
     } catch (err: any) {
-      setError(err);
-    } finally {
-      setLoading(false);
+      console.error("Failed to cast vote:", err);
+      throw err;
     }
   };
 
-  return { registerVoter, castVote, loading, error };
+  return {
+    registerVoter,
+    castVote,
+    loading: isWriting,
+    error: errorWrite?.message || null,
+  };
 };

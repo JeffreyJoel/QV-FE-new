@@ -1,0 +1,1 @@
+export const QVFactoryContract = "0x50139d921E6746C628dB7AbEc73060e8DA70afad";
